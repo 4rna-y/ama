@@ -10,8 +10,8 @@ not_found_handling = "404-page"
 [[d1_databases]]
 binding = "DB"
 database_name = "ama"
-# TODO: `pnpm cf d1 create ama` の出力で置き換える
-database_id = "00000000-0000-0000-0000-000000000000"
+# `pnpm cf d1 create ama` で作成 (region: APAC)
+database_id = "498ed0ae-3a98-4224-89b1-b828e96a7ed0"
 migrations_dir = "migrations"
 
 # 月次で古い like_locks を掃除する
