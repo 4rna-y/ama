@@ -2,6 +2,10 @@ name = "ama"
 main = "src/worker.ts"
 compatibility_date = "2026-09-01"
 
+# カスタムドメインで運用する。workers.dev を有効にすると同じ内容が
+# 2つの URL で公開され検索インデックスが重複するため無効にする。
+workers_dev = false
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
