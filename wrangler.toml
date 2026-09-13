@@ -1,0 +1,26 @@
+name = "ama"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "404-page"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ama"
+# TODO: `pnpm cf d1 create ama` の出力で置き換える
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# 月次で古い like_locks を掃除する
+[triggers]
+crons = ["0 4 1 * *"]
+
+# Like API の連打抑止(IP あたり 30回/分)
+[[unsafe.bindings]]
+name = "RATE_LIMIT"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }

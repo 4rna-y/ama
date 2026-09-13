@@ -1,0 +1,16 @@
+---
+import Base from '../layouts/Base.astro'
+---
+
+<Base title="検索" description="記事を検索する">
+  <h1 class="text-2xl font-bold">検索</h1>
+  <div id="search" class="mt-6"></div>
+
+  <link rel="stylesheet" href="/pagefind/pagefind-ui.css" />
+  <script is:inline src="/pagefind/pagefind-ui.js"></script>
+  <script is:inline>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.PagefindUI) new window.PagefindUI({ element: '#search', showSubResults: true })
+    })
+  </script>
+</Base>

@@ -1,0 +1,28 @@
+---
+import Base from '../../layouts/Base.astro'
+import { getTags, formatDate } from '../../lib/posts'
+import type { Post } from '../../lib/posts'
+
+export async function getStaticPaths() {
+  const tags = await getTags()
+  return [...tags].map(([tag, posts]) => ({ params: { tag }, props: { tag, posts } }))
+}
+
+const { tag, posts } = Astro.props as { tag: string; posts: Post[] }
+---
+
+<Base title={`#${tag}`} description={`タグ "${tag}" の記事一覧`}>
+  <h1 class="text-2xl font-bold">#{tag}</h1>
+  <ul class="mt-6 divide-y divide-neutral-200 dark:divide-neutral-800">
+    {
+      posts.map((post) => (
+        <li class="py-4">
+          <a href={`/posts/${post.data.slug}`} class="group block">
+            <time class="text-sm tabular-nums text-neutral-500">{formatDate(post.data.date)}</time>
+            <h2 class="font-semibold group-hover:underline">{post.data.title}</h2>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</Base>

@@ -1,0 +1,93 @@
+---
+/**
+ * PV / Like の表示。
+ * 数値は HTML に埋め込まない。埋め込むと HTML がキャッシュできなくなり、
+ * 静的配信(無料・高速)の利点を失うため、必ずクライアント側から取得する。
+ */
+interface Props {
+  slug: string
+}
+const { slug } = Astro.props
+---
+
+<div
+  class="flex items-center gap-4 text-sm text-neutral-600 dark:text-neutral-400"
+  data-post-stats
+  data-slug={slug}
+>
+  <span aria-live="polite">
+    <span class="tabular-nums" data-views>–</span> views
+  </span>
+
+  <button
+    type="button"
+    data-like
+    disabled
+    class="inline-flex items-center gap-1.5 rounded-full border border-neutral-300 px-3 py-1
+           transition enabled:hover:bg-neutral-100 disabled:opacity-50
+           data-[liked]:border-rose-400 data-[liked]:text-rose-600
+           dark:border-neutral-700 dark:enabled:hover:bg-neutral-800 dark:data-[liked]:text-rose-400"
+    aria-pressed="false"
+  >
+    <span aria-hidden="true">♥</span>
+    <span class="tabular-nums" data-likes>–</span>
+  </button>
+</div>
+
+<script>
+  const VIEW_TTL_MS = 30 * 60 * 1000
+
+  document.querySelectorAll<HTMLElement>('[data-post-stats]').forEach((root) => {
+    const slug = root.dataset.slug!
+    const viewsEl = root.querySelector<HTMLElement>('[data-views]')!
+    const likesEl = root.querySelector<HTMLElement>('[data-likes]')!
+    const likeBtn = root.querySelector<HTMLButtonElement>('[data-like]')!
+
+    // プレビューデプロイやローカルからの計上を本番 D1 に混ぜない
+    const isProd = location.hostname === '4rnay.net'
+    // ヘッドレスブラウザは計上しない
+    const isBot = navigator.webdriver
+
+    const render = (s: { views?: number; likes?: number }) => {
+      if (typeof s.views === 'number') viewsEl.textContent = s.views.toLocaleString()
+      if (typeof s.likes === 'number') likesEl.textContent = s.likes.toLocaleString()
+    }
+
+    const markLiked = () => {
+      likeBtn.dataset.liked = ''
+      likeBtn.setAttribute('aria-pressed', 'true')
+      likeBtn.disabled = true
+    }
+
+    if (localStorage.getItem(`liked:${slug}`)) markLiked()
+
+    // 30分以内の再読み込みは PV を二重計上しない
+    const lastSeen = Number(sessionStorage.getItem(`viewed:${slug}`) ?? 0)
+    const countView = isProd && !isBot && Date.now() - lastSeen > VIEW_TTL_MS
+
+    fetch(`/api/${countView ? 'view' : 'stats'}/${encodeURIComponent(slug)}`, {
+      method: countView ? 'POST' : 'GET',
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (!s) return
+        render(s)
+        if (countView) sessionStorage.setItem(`viewed:${slug}`, String(Date.now()))
+        likeBtn.disabled = !!localStorage.getItem(`liked:${slug}`)
+      })
+      .catch(() => {})
+
+    likeBtn.addEventListener('click', async () => {
+      likeBtn.disabled = true
+      try {
+        const r = await fetch(`/api/like/${encodeURIComponent(slug)}`, { method: 'POST' })
+        if (!r.ok) throw new Error(String(r.status))
+        render(await r.json())
+        localStorage.setItem(`liked:${slug}`, '1')
+        markLiked()
+      } catch {
+        likeBtn.disabled = false
+      }
+    })
+  })
+</script>
