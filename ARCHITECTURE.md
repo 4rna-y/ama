@@ -10,7 +10,7 @@
 - **記事ごとの PV(閲覧数)と Like を表示する**
 - コメント機能は不要
 - 運用の手数を最小化する(記事執筆時に触るのは content リポジトリのみ)
-- 全リポジトリ private
+- `ama`(サイト本体)は public、`ama-cont`(記事)は private
 
 ## 1. 技術選定(確定)
 
@@ -21,7 +21,7 @@
 | PV / Like ストア | **Cloudflare D1** | Workers KV, Durable Objects, Analytics Engine |
 | PV / Like API | **同一 Worker の `/api/*` ハンドラ** | 別 Worker, 外部 BaaS |
 | CI/CD | **GitHub Actions**(Cloudflare 側のビルドは使わない) | Cloudflare Pages Build, GitLab CI |
-| リポジトリ | **2リポジトリ分離 / 両方 private** (`ama-cont` / `ama`) | モノレポ |
+| リポジトリ | **2リポジトリ分離** (`ama` = public / `ama-cont` = private) | モノレポ, 両方 private |
 | 画像 | **リポジトリ内に直接コミット** → ビルド時に AVIF/WebP 生成 | R2, Cloudflare Images, Git LFS |
 | OGP | **satori + @resvg/resvg-js**(ビルド時静的生成 + 差分キャッシュ) | Workers 動的生成, canvaskit |
 | 検索 | Pagefind(静的インデックス) | Algolia |
@@ -45,7 +45,7 @@
       │
       └─ dispatch.yml ── repository_dispatch(content-updated) ──┐
                                                                  │
-[ama / private] deploy.yml ◄─────────────────────────────────────┘
+[ama / public]  deploy.yml ◄─────────────────────────────────────┘
       1. checkout ama
       2. checkout ama-cont → ./content   (読み取り専用 Deploy Key)
       3. pnpm install (キャッシュあり)
@@ -101,7 +101,7 @@ draft: false               # true は本番ビルドから除外、プレビュ�
 ---
 ```
 
-### ama(テーマ・ビルド定義・Worker / private)
+### ama(テーマ・ビルド定義・Worker / public)
 
 ```
 src/
@@ -402,33 +402,46 @@ Deploy Key は 1 リポジトリにスコープが固定され有効期限もな
 
 D1 のマイグレーションを CI から流すため、API トークンには D1 の編集権限も要る点に注意。
 
-## 7. private リポジトリ運用
+## 7. リポジトリ可視性と運用
 
-両リポジトリとも **private で問題ない**。月額は $0 のまま。giscus を採用しないので、**public リポジトリは1つも不要**になった。
+**`ama` = public / `ama-cont` = private** の非対称構成を採用している。
 
-| 論点 | private の場合 | 対応 |
+| リポジトリ | 可視性 | 理由 |
 |---|---|---|
-| Cloudflare からのリポジトリ参照 | **影響なし**。Actions から wrangler で直接アップロードするため、Cloudflare にリポジトリ権限を渡していない | 対応不要 |
-| GitHub Actions 実行時間 | public の無制限が使えず、アカウント共通の無料枠(Free プランで月2,000分)を消費 | 下記試算のとおり十分収まる |
-| Actions キャッシュ | public/private を問わずリポジトリあたり 10GB が無料 | 対応不要 |
-| Artifacts / Packages ストレージ | Free プランは 500MB。アーティファクトをアップロードしない設計なので消費しない | 対応不要 |
-| リポジトリ間のアクセス | 匿名 clone ができず、ama から ama-cont を読むのに認証情報が必要 | 読み取り専用 Deploy Key(無期限) |
-| ビルドログ・プレビューURL | 外部から見えない | public 運用より安全(利点) |
+| `ama`(サイト本体) | **public** | 重いビルドが走る側。public にすると **Actions 実行時間が無制限**になる(分数はワークフローが実行されるリポジトリに課金されるため)。中身はテーマと Worker のコードだけで、秘匿する必要がない |
+| `ama-cont`(記事) | **private** | 下書き・推敲履歴・未公開記事を外部に見せない |
 
-### Actions 実行時間の試算
+### この構成で成立する理由
 
-| 項目 | 値 |
+| 論点 | 状況 |
 |---|---|
-| 無料枠(Free プラン / Linux ランナーは 1x 課金) | 2,000 分 / 月 |
-| 1 ビルドの想定所要時間(キャッシュ有効時) | 3〜5 分 |
-| 実行可能ビルド回数 | **月 400〜660 回**(1日13〜22回) |
-| ama-cont 側の dispatch ワークフロー | 1回あたり約10秒。実質ゼロ |
+| Cloudflare からのリポジトリ参照 | **不要**。Actions から wrangler で直接アップロードするため、Cloudflare にリポジトリ権限を渡していない |
+| GitHub Actions 実行時間 | **無制限**。ama が public なので枠を気にしなくてよい。ama-cont 側の dispatch は1回10秒程度で、仮に private 枠を消費しても無視できる |
+| Actions キャッシュ | public/private を問わずリポジトリあたり 10GB が無料 |
+| Artifacts / Packages ストレージ | Free プランは 500MB。アーティファクトをアップロードしない設計なので消費しない |
+| リポジトリ間のアクセス | ama から ama-cont を匿名 clone できないため、読み取り専用 Deploy Key(無期限)を使う |
+| 記事の非公開性 | ama のビルドログには生成されたページのパスしか出ない。`draft: true` は本番ビルドから除外されるので、下書きのタイトルすら露出しない |
 
-枠を圧迫しうるのは「全画像の再生成」のような一括ビルドなので、`concurrency: cancel-in-progress`、パスフィルタ、画像出力キャッシュで抑える。
+### public 側で守るべきこと
 
-### public に切り替えるべきケース
+public リポジトリのシークレットに、private な `ama-cont` の読み取り鍵(`CONTENT_DEPLOY_KEY`)を置いている。ここが唯一の注意点。
 
-Actions が月2,000分を超えそうな場合のみ。その際は **ama(重いビルドが走る側)だけを public にし、ama-cont は private のまま**にする(分数はワークフローが実行されるリポジトリに課金されるため)。ただし public リポジトリのシークレットに private content の読み取り鍵を置くことになる。fork からの `pull_request` にはシークレットが渡らないので窃取経路はないが、`pull_request_target` は絶対に使わないこと。
+1. **`pull_request_target` を絶対に使わない。** fork の PR に対してシークレット付きでベースリポジトリのコードを実行してしまい、鍵が漏れる
+2. **fork からの PR ではワークフローを実行しない。** `deploy.yml` のジョブに以下のガードを入れてある。
+   ```yaml
+   if: >-
+     github.event_name != 'pull_request' ||
+     github.event.pull_request.head.repo.full_name == github.repository
+   ```
+   fork PR にはシークレットが渡らないのでどのみち失敗するが、そもそも未信頼のコードを CI で実行しない
+3. **`permissions: contents: read`** を明示し、`GITHUB_TOKEN` の権限を最小化している
+4. **Deploy Key は read-only** で登録する。書き込み権限を与えない
+
+### 公開によって外部から見えるもの
+
+- テーマ・Worker のソース、設計書(`ARCHITECTURE.md`)、ワークフロー定義
+- コミット履歴とコミット作者のメールアドレス(`ikuyama_kyo@outlook.jp`)
+- `wrangler.toml` の `database_id`。これは識別子であって資格情報ではなく、アカウント認証なしには利用できない(Cloudflare 公式のサンプルでもそのまま記載される)
 
 ## 8. コスト内訳
 
@@ -440,7 +453,7 @@ Actions が月2,000分を超えそうな場合のみ。その際は **ama(重い
 | D1 行読み取り | 5,000,000 / 日 | 一覧ページの一括取得のみ | $0 |
 | D1 ストレージ | 5 GB | 記事数×数十バイト。実質ゼロ | $0 |
 | Cloudflare DNS / TLS / Web Analytics | 無制限 | - | $0 |
-| GitHub Actions(private) | 2,000 分 / 月 | 月数十ビルド = 100〜200分 | $0 |
+| GitHub Actions | **無制限**(ama が public のため) | 月数十ビルド | $0 |
 | GitHub Actions キャッシュ | 10GB / リポジトリ | 数百MB | $0 |
 | GitHub リポジトリ容量 | 実質1GB目安 | 画像込みで数百MB以内に維持 | $0 |
 | **合計** | | | **$0 / 月** |
@@ -450,7 +463,7 @@ Actions が月2,000分を超えそうな場合のみ。その際は **ama(重い
 ### 課金に転ぶ現実的なシナリオと対策
 
 1. リポジトリが肥大化(画像) → 数百MB を超えたら大容量メディアだけ R2(無料枠10GB・エグレス無料)へ退避
-2. Actions 2,000分/月を超過 → キャッシュを効かせる。足りなければ ama のみ public 化
+2. ~~Actions 2,000分/月を超過~~ → ama を public にしたため無制限。解消済み
 3. 10万PV/日を超過 → PV 計上を Durable Objects のメモリ内カウンタ + 定期永続化に移行(書き込み回数が激減する)
 4. Like の API を総当たりで叩かれる → Rate Limiting バインディングで抑止。既に対策済み
 5. Cloudflare Images / Polish など有料機能の誤有効化 → 使わない
@@ -470,7 +483,7 @@ Actions が月2,000分を超えそうな場合のみ。その際は **ama(重い
 
 | 役割 | GitHub | ローカル | 可視性 |
 |---|---|---|---|
-| サイト(テーマ・ビルド定義・Worker) | `4rna-y/ama` | `/home/rg/repos/ama` | private |
+| サイト(テーマ・ビルド定義・Worker) | `4rna-y/ama` | `/home/rg/repos/ama` | **public** |
 | 記事・画像 | `4rna-y/ama-cont` | `/home/rg/repos/ama-cont`(想定) | private |
 
 Worker 名・D1 データベース名ともに `ama`。
