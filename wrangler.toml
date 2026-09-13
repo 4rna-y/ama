@@ -6,6 +6,12 @@ compatibility_date = "2026-09-01"
 # 2つの URL で公開され検索インデックスが重複するため無効にする。
 workers_dev = false
 
+# apex をブログに割り当てる。custom_domain = true にすると Cloudflare が
+# DNS レコードを自動管理する(手動の A/AAAA レコードとは併存できない)。
+routes = [
+  { pattern = "4rnay.net", custom_domain = true }
+]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
