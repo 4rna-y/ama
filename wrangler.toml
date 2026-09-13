@@ -6,11 +6,13 @@ compatibility_date = "2026-09-01"
 # 2つの URL で公開され検索インデックスが重複するため無効にする。
 workers_dev = false
 
-# apex をブログに割り当てる。custom_domain = true にすると Cloudflare が
-# DNS レコードを自動管理する(手動の A/AAAA レコードとは併存できない)。
-routes = [
-  { pattern = "4rnay.net", custom_domain = true }
-]
+# カスタムドメイン 4rnay.net は初回セットアップ時に一度だけ割り当て済み。
+# ここに routes を宣言すると wrangler が /zones/*/workers/routes を叩くため、
+# CI トークンに Zone:Workers Routes:Edit が必要になる。public リポジトリの
+# シークレットに持たせる権限は絞りたいので宣言しない。
+# 宣言を外しても既存のカスタムドメインは維持されることを実測で確認済み。
+# 再割当が必要になった場合は下記を一時的に有効化してローカルからデプロイする:
+#   routes = [{ pattern = "4rnay.net", custom_domain = true }]
 
 [assets]
 directory = "./dist"
